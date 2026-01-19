@@ -86,7 +86,7 @@ def _process_image(image_path):
     # Resize for processing if too large
     display_image = utils.resize_image(image, max_width=800, max_height=600)
     
-    # Detect plate region
+    # Detect license plate region - also get bounding box for drawing
     plate_region, bounding_box = detector.detect_plate_region(display_image)
     
     if plate_region is None:

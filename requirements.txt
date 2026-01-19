@@ -5,4 +5,4 @@ pillow>=10.0.0
 ultralytics>=8.0.0
 torch>=2.0.0
 easyocr>=1.6.0
-scipy>=1.10.0
+scipy>=1.10.0pytesseract>=0.3.10

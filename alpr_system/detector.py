@@ -11,10 +11,10 @@ _yolo_model = None
 
 def get_yolo_model():
     """
-    Load or return cached YOLO model.
+    Load or return cached license plate YOLO model.
     
     Returns:
-        YOLO: YOLOv8 model instance
+        YOLO: YOLOv8 model instance for license plate detection
     """
     global _yolo_model
     
@@ -22,20 +22,37 @@ def get_yolo_model():
         return _yolo_model
     
     try:
-        # Use YOLOv8 nano model (faster and smaller)
-        model_path = "yolov8n.pt"
+        # Use license plate-specific YOLOv8 model
+        # Located in models/ directory at project root
+        import os
         
-        print(f"Loading YOLO model: {model_path}")
+        # Determine the path to the license plate model
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(current_dir)
+        model_path = os.path.join(project_root, "models", "license_plate_detector.pt")
+        
+        # Fallback to relative path if absolute path doesn't work
+        if not os.path.exists(model_path):
+            model_path = "models/license_plate_detector.pt"
+        
+        # If still not found, check for yolov8n.pt in models directory
+        if not os.path.exists(model_path):
+            alt_path = os.path.join(project_root, "models", "yolov8n.pt")
+            if os.path.exists(alt_path):
+                model_path = alt_path
+                print("License plate model not found, using YOLOv8n as fallback")
+        
+        print(f"Loading license plate detector model: {model_path}")
         _yolo_model = YOLO(model_path)
         
         # Set to evaluation mode
         _yolo_model.eval()
         
-        print("YOLO model loaded successfully")
+        print("License plate detector model loaded successfully")
         return _yolo_model
     
     except Exception as e:
-        print(f"Error loading YOLO model: {str(e)}")
+        print(f"Error loading license plate model: {str(e)}")
         raise
 
 
@@ -348,3 +365,31 @@ def get_all_plate_regions(image, max_plates=5):
     except Exception as e:
         print(f"Error in multi-plate YOLO detection: {str(e)}")
         return []
+
+
+def detect_license_plate(image):
+    """
+    Detect a license plate in an image using the license plate detector model.
+    
+    This function runs YOLO inference on the input image and returns the
+    cropped license plate region if detected, or None if no plate is found.
+    
+    Args:
+        image: Input image in BGR format (OpenCV format)
+    
+    Returns:
+        np.ndarray: Cropped license plate image if detected
+        None: If no license plate is detected
+    """
+    try:
+        # Run detection using the standard detection function
+        plate_region, bounding_box = detect_plate_region(image)
+        
+        if plate_region is None:
+            return None
+        
+        return plate_region
+    
+    except Exception as e:
+        print(f"Error in detect_license_plate: {str(e)}")
+        return None

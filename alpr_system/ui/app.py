@@ -107,8 +107,14 @@ def clear_session():
 def display_results(results):
     """Display detection results in a formatted way."""
     if not results['success']:
-        # Display error message
-        st.error(f"❌ {results['message']}")
+        # Display error message with warning box
+        st.warning(f"⚠️ {results['message']}")
+        
+        # Show processed image anyway if available
+        if results['processed_image'] is not None:
+            st.subheader("📸 Processed Image")
+            processed_rgb = convert_bgr_to_rgb(results['processed_image'])
+            st.image(processed_rgb, use_column_width=True)
         return
     
     # Display success message
