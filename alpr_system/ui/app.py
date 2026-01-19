@@ -1,10 +1,10 @@
 """
 Nigerian Automatic License Plate Recognition System - Streamlit UI
 
-Simple, clean web interface for ALPR detection using Streamlit.
-Users can upload images or videos, trigger detection manually, and view results.
+Clean, professional web interface for ALPR detection.
+Users can upload images or videos, detect plates, and retrieve vehicle information.
 
-Run with: streamlit run app.py
+Run with: streamlit run alpr_system/ui/app.py
 """
 
 import streamlit as st
@@ -19,9 +19,8 @@ from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from alpr_system.main import run_alpr, get_result_summary
-from alpr_system.detector import draw_bounding_box
-from alpr_system.utils import convert_bgr_to_rgb, load_image_from_bytes, is_image_file, is_video_file
+from alpr_system.main import run_alpr
+from alpr_system.utils import convert_bgr_to_rgb, is_image_file, is_video_file
 
 
 # ============================================================================
@@ -31,10 +30,11 @@ from alpr_system.utils import convert_bgr_to_rgb, load_image_from_bytes, is_imag
 st.set_page_config(
     page_title="Nigerian ALPR System",
     page_icon="🚗",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
 
-# Custom CSS for better styling
+# Custom CSS for professional styling
 st.markdown("""
 <style>
     .main {
@@ -42,29 +42,52 @@ st.markdown("""
     }
     .stButton > button {
         width: 100%;
-        padding: 10px;
+        padding: 12px;
         font-size: 16px;
+        border-radius: 6px;
+    }
+    .plate-number {
+        font-family: monospace;
+        font-size: 24px;
+        font-weight: bold;
+        padding: 12px;
+        background-color: #f0f0f0;
+        border-radius: 4px;
+        text-align: center;
     }
     .success-box {
-        padding: 1rem;
-        border-radius: 0.5rem;
+        padding: 1.5rem;
+        border-radius: 8px;
         background-color: #d4edda;
-        border: 1px solid #c3e6cb;
+        border: 2px solid #28a745;
         color: #155724;
     }
     .error-box {
-        padding: 1rem;
-        border-radius: 0.5rem;
+        padding: 1.5rem;
+        border-radius: 8px;
         background-color: #f8d7da;
-        border: 1px solid #f5c6cb;
+        border: 2px solid #dc3545;
         color: #721c24;
     }
+    .warning-box {
+        padding: 1.5rem;
+        border-radius: 8px;
+        background-color: #fff3cd;
+        border: 2px solid #ffc107;
+        color: #856404;
+    }
     .info-box {
-        padding: 1rem;
-        border-radius: 0.5rem;
+        padding: 1.5rem;
+        border-radius: 8px;
         background-color: #d1ecf1;
-        border: 1px solid #bee5eb;
+        border: 2px solid #17a2b8;
         color: #0c5460;
+    }
+    .vehicle-info {
+        background-color: #f9f9f9;
+        padding: 1.5rem;
+        border-radius: 8px;
+        border-left: 4px solid #007bff;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -104,60 +127,104 @@ def clear_session():
     st.session_state.file_type = None
 
 
+def display_plate_found(plate_data):
+    """
+    Display results when plate is found in database.
+    
+    Args:
+        plate_data: Dictionary containing plate and vehicle information
+    """
+    st.success("✅ Plate detected and found in database!")
+    
+    # Create a clean vehicle info display
+    with st.container():
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("**Plate Number**")
+            st.markdown(f'<div class="plate-number">{plate_data["plate_number"]}</div>', 
+                       unsafe_allow_html=True)
+            
+            st.markdown("**Plate Status**")
+            st.info(f"✅ Found in database")
+        
+        with col2:
+            st.markdown("**Plate Details**")
+            st.write(f"🎨 **Color:** {plate_data.get('plate_color', 'Unknown')}")
+            st.write(f"🏷️ **Type:** {plate_data.get('plate_type', 'Unknown')}")
+    
+    st.divider()
+    
+    # Vehicle Information
+    st.subheader("🚗 Vehicle Information")
+    vehicle_col1, vehicle_col2 = st.columns(2)
+    
+    with vehicle_col1:
+        st.write(f"👤 **Owner:** {plate_data.get('owner_name', 'N/A')}")
+        st.write(f"📍 **State:** {plate_data.get('state', 'N/A')}")
+    
+    with vehicle_col2:
+        st.write(f"🚙 **Vehicle:** {plate_data.get('vehicle_type', 'N/A')}")
+        st.write(f"🏘️ **Type:** {plate_data.get('plate_type', 'N/A')}")
+
+
+def display_plate_not_found(plate_number):
+    """
+    Display results when plate is detected but not found in database.
+    
+    Args:
+        plate_number: The detected plate number
+    """
+    st.warning("⚠️ Plate detected but not found in database")
+    
+    with st.container():
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("**Plate Number**")
+            st.markdown(f'<div class="plate-number">{plate_number}</div>', 
+                       unsafe_allow_html=True)
+        
+        with col2:
+            st.markdown("**Status**")
+            st.write("🔍 Plate detected but not registered")
+            st.write("🏷️ **Vehicle Type:** Unknown")
+            st.write("🎨 **Plate Color:** Unknown")
+
+
+def display_no_plate_detected():
+    """Display message when no plate is detected."""
+    st.error("❌ No license plate detected in the image")
+    st.info("💡 Try uploading a clearer image with a visible license plate")
+
+
+def display_invalid_plate():
+    """Display message for invalid plate format."""
+    st.error("❌ Invalid Nigerian license plate format")
+    st.info("📋 Valid format: AAA-123AA (e.g., KTS-123AB)")
+
+
+def display_detection_image(processed_image):
+    """Display the processed image with bounding boxes."""
+    if processed_image is not None:
+        st.subheader("📸 Detected Image")
+        processed_rgb = convert_bgr_to_rgb(processed_image)
+        st.image(processed_rgb, use_container_width=True)
+
+
 def display_results(results):
     """Display detection results in a formatted way."""
     if not results['success']:
-        # Display error message with warning box
+        # Display error message
         st.warning(f"⚠️ {results['message']}")
         
-        # Show processed image anyway if available
+        # Show processed image if available
         if results['processed_image'] is not None:
-            st.subheader("📸 Processed Image")
-            processed_rgb = convert_bgr_to_rgb(results['processed_image'])
-            st.image(processed_rgb, use_column_width=True)
+            display_detection_image(results['processed_image'])
         return
     
-    # Display success message
-    st.success(f"✅ {results['message']}")
-    
-    # Display processed image with bounding boxes
-    if results['processed_image'] is not None:
-        st.subheader("📸 Detected Image")
-        processed_rgb = convert_bgr_to_rgb(results['processed_image'])
-        st.image(processed_rgb, use_column_width=True)
-    
-    # Display detection details for each plate
-    if results['results']:
-        st.subheader("📋 Detection Results")
-        
-        for i, plate_info in enumerate(results['results'], 1):
-            with st.container():
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.write(f"**Plate #{i}**")
-                    st.metric("Plate Number", plate_info['plate_number'])
-                    st.metric("Plate Type", plate_info['plate_type'])
-                    st.metric("Plate Color", plate_info['plate_color'])
-                
-                with col2:
-                    st.write(f"**Vehicle Information**")
-                    st.metric("Owner", plate_info.get('owner_name', 'N/A'))
-                    st.metric("Registration State", plate_info.get('state', 'N/A'))
-                    st.metric("Registered", "✓ Yes" if plate_info.get('registered') else "✗ No")
-                
-                # Additional details
-                st.write("**Additional Details**")
-                details_cols = st.columns(3)
-                with details_cols[0]:
-                    st.write(f"**Vehicle Type:** {plate_info.get('vehicle_type', 'N/A')}")
-                with details_cols[1]:
-                    st.write(f"**Vehicle Color:** {plate_info.get('vehicle_color', 'N/A')}")
-                with details_cols[2]:
-                    st.write(f"**Year:** {plate_info.get('year', 'N/A')}")
-                
-                st.write(f"**Detection Time:** {plate_info['timestamp']}")
-                st.divider()
+    # Display processed image
+    display_detection_image(results.get('processed_image'))
 
 
 # ============================================================================
@@ -165,125 +232,104 @@ def display_results(results):
 # ============================================================================
 
 # Title and Header
-st.title("🚗 Nigerian Automatic License Plate Recognition System")
+st.title("🚗 Nigerian ALPR System")
+st.markdown("Automatic License Plate Recognition")
 st.markdown("---")
-st.write("Upload an image or video to detect license plates and retrieve vehicle information.")
 
-# Create two-column layout for better organization
-left_column, right_column = st.columns([1, 1])
+# Two-column layout
+left_col, right_col = st.columns([1, 1], gap="large")
 
 # ============================================================================
 # LEFT COLUMN: FILE UPLOAD AND PREVIEW
 # ============================================================================
 
-with left_column:
-    st.subheader("📁 File Upload")
+with left_col:
+    st.subheader("📁 Upload File")
     
-    # File uploader widget
+    # File uploader
     uploaded_file = st.file_uploader(
-        "Choose an image or video",
+        "Select an image or video",
         type=['jpg', 'jpeg', 'png', 'mp4', 'avi', 'mov', 'mkv'],
-        help="Supported formats: JPG, PNG for images; MP4, AVI for videos"
+        help="Supported: JPG, PNG images or MP4, AVI videos"
     )
     
-    # Handle file upload
+    # Process uploaded file
     if uploaded_file is not None:
-        # Get file extension to preserve it in temp file
         _, file_ext = os.path.splitext(uploaded_file.name)
         
-        # Save file temporarily with proper extension and update session state
-        with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp_file:
-            tmp_file.write(uploaded_file.getbuffer())
-            temp_path = tmp_file.name
+        # Save to temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp:
+            tmp.write(uploaded_file.getbuffer())
+            temp_path = tmp.name
         
         st.session_state.uploaded_file = temp_path
         st.session_state.uploaded_file_name = uploaded_file.name
         
-        # Determine file type with better detection
-        file_name_lower = uploaded_file.name.lower()
-        
-        # Check image extensions
-        image_extensions = ('.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff', '.webp')
-        video_extensions = ('.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.webm')
-        
-        if any(file_name_lower.endswith(ext) for ext in image_extensions):
+        # Determine file type
+        file_lower = uploaded_file.name.lower()
+        if any(file_lower.endswith(ext) for ext in ['.jpg', '.jpeg', '.png']):
             st.session_state.file_type = 'image'
-        elif any(file_name_lower.endswith(ext) for ext in video_extensions):
+        elif any(file_lower.endswith(ext) for ext in ['.mp4', '.avi', '.mov', '.mkv']):
             st.session_state.file_type = 'video'
-        else:
-            # Fallback: try using the is_image_file and is_video_file functions
-            if is_image_file(uploaded_file.name):
-                st.session_state.file_type = 'image'
-            elif is_video_file(uploaded_file.name):
-                st.session_state.file_type = 'video'
-            else:
-                st.error(f"❌ Unsupported file type: {uploaded_file.name}. Please upload a JPG, PNG image or MP4, AVI video.")
     
-    # Display preview if file is uploaded
+    # Display preview
     if st.session_state.uploaded_file and st.session_state.file_type:
         st.subheader("👁️ Preview")
         
         if st.session_state.file_type == 'image':
-            # Display image preview
             image = Image.open(st.session_state.uploaded_file)
-            st.image(image, use_column_width=True, caption="Uploaded Image")
-        
-        elif st.session_state.file_type == 'video':
-            # Display video player
+            st.image(image, use_container_width=True)
+        else:
             video_file = open(st.session_state.uploaded_file, 'rb')
             st.video(video_file)
             video_file.close()
 
 
 # ============================================================================
-# RIGHT COLUMN: CONTROL BUTTONS AND RESULTS
+# RIGHT COLUMN: CONTROLS AND RESULTS
 # ============================================================================
 
-with right_column:
+with right_col:
     st.subheader("⚙️ Controls")
     
-    # Create button columns
+    # Buttons
     button_col1, button_col2 = st.columns(2)
     
     with button_col1:
-        detect_button = st.button(
+        detect_btn = st.button(
             "🔍 Detect Plate",
-            help="Click to run license plate detection",
-            use_container_width=True
+            use_container_width=True,
+            type="primary"
         )
     
     with button_col2:
-        clear_button = st.button(
+        clear_btn = st.button(
             "🗑️ Clear",
-            help="Clear uploaded file and results",
             use_container_width=True
         )
     
     # Handle detect button
-    if detect_button:
+    if detect_btn:
         if st.session_state.uploaded_file is None:
-            st.error("⚠️ Please upload an image or video first!")
+            st.error("Please upload an image or video first")
         else:
-            with st.spinner("🔄 Processing... This may take a moment..."):
+            with st.spinner("🔄 Processing... Please wait..."):
                 try:
-                    # Run ALPR detection
                     results = run_alpr(st.session_state.uploaded_file)
                     st.session_state.detection_results = results
                     st.session_state.processed_image = results.get('processed_image')
                 except Exception as e:
-                    st.error(f"❌ Error during detection: {str(e)}")
+                    st.error(f"Error during detection: {str(e)}")
     
     # Handle clear button
-    if clear_button:
-        # Clean up temporary file
+    if clear_btn:
         if st.session_state.uploaded_file and os.path.exists(st.session_state.uploaded_file):
             try:
                 os.remove(st.session_state.uploaded_file)
             except:
                 pass
-        
         clear_session()
-        st.success("✅ Cleared! Ready for new upload.")
+        st.success("✅ Cleared! Ready for new upload")
         st.rerun()
 
 
@@ -294,40 +340,69 @@ with right_column:
 st.markdown("---")
 
 if st.session_state.detection_results:
-    st.subheader("📊 Detection Results")
-    display_results(st.session_state.detection_results)
-elif st.session_state.uploaded_file and st.session_state.file_type:
-    st.info("ℹ️ Click 'Detect Plate' to start detection")
+    st.subheader("📊 Results")
+    results = st.session_state.detection_results
+    
+    # Display processed image
+    display_detection_image(results.get('processed_image'))
+    
+    st.divider()
+    
+    # Handle different result scenarios
+    if results['success'] and results.get('results'):
+        # Plate was detected and found
+        plate_data = results['results'][0]
+        
+        if plate_data.get('registered'):
+            # Plate found in database
+            display_plate_found(plate_data)
+        else:
+            # Plate detected but not in database
+            display_plate_not_found(plate_data.get('plate_number', 'Unknown'))
+    
+    elif results['success']:
+        # Plate detected but no valid results
+        display_no_plate_detected()
+    
+    elif not results['success']:
+        # Error cases
+        message = results.get('message', 'Unknown error')
+        if 'no plate' in message.lower() or 'not detected' in message.lower():
+            display_no_plate_detected()
+        elif 'invalid' in message.lower():
+            display_invalid_plate()
+        else:
+            st.error(f"❌ {message}")
+
+elif st.session_state.uploaded_file:
+    st.info("👆 Click 'Detect Plate' to start recognition")
 else:
-    st.info("ℹ️ Upload an image or video to begin")
+    st.info("👈 Upload an image or video to begin")
 
 
 # ============================================================================
-# FOOTER AND INFORMATION
+# FOOTER
 # ============================================================================
 
 st.markdown("---")
 
-# Information section
 with st.expander("ℹ️ System Information"):
     col1, col2, col3 = st.columns(3)
     
     with col1:
         st.write("**Supported Formats**")
-        st.write("• Images: JPG, PNG")
-        st.write("• Videos: MP4, AVI")
+        st.write("📷 Images: JPG, PNG")
+        st.write("🎥 Videos: MP4, AVI, MOV")
     
     with col2:
-        st.write("**How It Works**")
-        st.write("1. Upload image/video")
-        st.write("2. Click 'Detect Plate'")
-        st.write("3. View results")
+        st.write("**Plate Format**")
+        st.write("Example: **KTS-123AB**")
+        st.write("3 letters - 3 digits - 2 letters")
     
     with col3:
-        st.write("**Features**")
-        st.write("• License plate detection")
-        st.write("• OCR text extraction")
-        st.write("• Database lookup")
-        st.write("• Vehicle info retrieval")
+        st.write("**How It Works**")
+        st.write("1️⃣ Upload file")
+        st.write("2️⃣ Click Detect")
+        st.write("3️⃣ View results")
 
-st.caption("🚗 Nigerian ALPR System | Powered by OpenCV & Streamlit | v1.0")
+st.caption("🚗 Nigerian ALPR System | Powered by YOLOv8 & Streamlit | v1.0")

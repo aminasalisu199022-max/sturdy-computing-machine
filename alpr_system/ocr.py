@@ -39,6 +39,10 @@ def cleanup_ocr_text(text):
     """
     Clean up OCR-extracted text for Nigerian license plates.
     
+    Steps:
+    1. Convert to uppercase
+    2. Remove all non-alphanumeric characters
+    
     Args:
         text: Raw OCR text
     
@@ -46,14 +50,21 @@ def cleanup_ocr_text(text):
         Cleaned text (uppercase alphanumeric only)
     """
     text = text.upper().strip()
-    # Remove spaces and special characters, keep only alphanumeric
-    text = re.sub(r'[^A-Z0-9\-]', '', text)
+    # Remove all non-alphanumeric characters (except hyphen for now)
+    text = re.sub(r'[^A-Z0-9]', '', text)
     return text
 
 
 def enhance_plate_image(image):
     """
-    Enhance a plate image for better OCR results.
+    Enhanced preprocessing pipeline for Nigerian license plates.
+    
+    Pipeline:
+    1. Convert to grayscale
+    2. Apply bilateral filter (noise reduction)
+    3. Apply adaptive thresholding
+    4. Increase contrast
+    5. Resize for better OCR (at least 2x)
     
     Args:
         image: Input plate image
@@ -64,18 +75,30 @@ def enhance_plate_image(image):
     # Convert to grayscale if color image
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
     
-    # Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    enhanced = clahe.apply(gray)
+    # Step 1: Bilateral filter (reduce noise while preserving edges)
+    filtered = cv2.bilateralFilter(gray, 9, 75, 75)
     
-    # Denoise
-    denoised = cv2.bilateralFilter(enhanced, 9, 75, 75)
+    # Step 2: Adaptive thresholding
+    adaptive_thresh = cv2.adaptiveThreshold(filtered, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                            cv2.THRESH_BINARY, 11, 2)
     
-    # Sharpen
+    # Step 3: Increase contrast using CLAHE
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+    enhanced = clahe.apply(adaptive_thresh)
+    
+    # Step 4: Resize plate ROI to at least 2x for better OCR
+    # Calculate if we need upscaling
+    height, width = enhanced.shape
+    if height < 100 or width < 300:  # Small plate, upscale
+        scale = max(2, int(300 / width) if width > 0 else 2)
+        enhanced = cv2.resize(enhanced, None, fx=scale, fy=scale, 
+                              interpolation=cv2.INTER_CUBIC)
+    
+    # Step 5: Sharpen edges for character clarity
     kernel = np.array([[-1, -1, -1],
                        [-1,  9, -1],
-                       [-1, -1, -1]])
-    sharpened = cv2.filter2D(denoised, -1, kernel)
+                       [-1, -1, -1]], dtype=np.float32)
+    sharpened = cv2.filter2D(enhanced, -1, kernel)
     
     return sharpened
 

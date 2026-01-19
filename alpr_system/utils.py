@@ -45,6 +45,67 @@ def load_image_from_bytes(image_bytes):
         return None
 
 
+def pil_to_opencv(pil_image):
+    """
+    Convert PIL Image to OpenCV BGR numpy array.
+    
+    Args:
+        pil_image: PIL Image object
+    
+    Returns:
+        np.ndarray: Image in BGR format for OpenCV/YOLO
+    """
+    try:
+        # Convert PIL image to numpy array (RGB)
+        rgb_array = np.array(pil_image)
+        
+        # Convert RGB to BGR for OpenCV compatibility
+        bgr_array = cv2.cvtColor(rgb_array, cv2.COLOR_RGB2BGR)
+        
+        return bgr_array
+    except Exception as e:
+        print(f"Error converting PIL image to OpenCV: {e}")
+        return None
+
+
+def ensure_opencv_format(image):
+    """
+    Ensure image is in OpenCV BGR format.
+    Handles PIL Images, RGB arrays, and OpenCV BGR arrays.
+    
+    Args:
+        image: Image as PIL Image, numpy array (RGB or BGR), or file path
+    
+    Returns:
+        np.ndarray: Image in BGR format
+    """
+    try:
+        # Check if it's a PIL Image by checking for PIL Image attributes
+        if hasattr(image, 'mode') and hasattr(image, 'size'):
+            # It's a PIL Image
+            return pil_to_opencv(image)
+        
+        # Check if it's a numpy array
+        if isinstance(image, np.ndarray):
+            # If it's 3-channel and likely RGB (e.g., from PIL), convert to BGR
+            if len(image.shape) == 3 and image.shape[2] == 3:
+                # Assume it's RGB if values are in typical range
+                # YOLO and OpenCV expect BGR
+                # We'll use the convention that arrays from files are BGR,
+                # and arrays from PIL are RGB
+                pass  # Already BGR from OpenCV, no conversion needed
+            return image
+        
+        # If it's a string path, load it
+        if isinstance(image, str):
+            return load_image(image)
+        
+        return None
+    except Exception as e:
+        print(f"Error ensuring OpenCV format: {e}")
+        return None
+
+
 def save_image(image, output_path):
     """
     Save an image to file.

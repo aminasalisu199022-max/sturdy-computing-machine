@@ -1,7 +1,7 @@
 """
 Nigerian License Plate Validation Module
 
-Validates Nigerian license plates using the format:
+Validates Nigerian license plates using the simple format:
 AAA-123AA (3 letters - 3 digits - 2 letters)
 
 Example: KTS-123AB
@@ -23,8 +23,9 @@ def normalize_plate(text):
     2. Remove all non-alphanumeric characters
     3. Format to expected 8-character length (3 letters + 3 digits + 2 letters)
     4. Apply context-aware OCR corrections:
-       - In letter positions: 5 → S, 8 → B, 1 → I, 0 → O
-       - In digit positions: O → 0, I → 1, S → 5, B → 8
+       - In letter positions: 5 → S, 8 → B, 1 → I
+       - In digit positions: O → 0, I → 1
+       - Throughout: 0 → 0 in numbers, O → O in letters
     5. Add hyphen in correct position
     
     Nigerian format: AAA-123AA (3 letters - 3 digits - 2 letters)
@@ -32,7 +33,7 @@ def normalize_plate(text):
     Example:
         normalize_plate("kts-123ab") → "KTS-123AB"
         normalize_plate("kts123ab") → "KTS-123AB"
-        normalize_plate("kts8o3ab") → "KTS-803AB" (8→B in letter, O→0 in digits)
+        normalize_plate("k75123ab") → "KIS-123AB" (5→S in letter position)
     
     Args:
         text: Raw OCR text or user input
@@ -51,9 +52,9 @@ def normalize_plate(text):
         return text
     
     # Step 4: Extract sections (first 8 chars only)
-    letters_prefix = text[:3]  # Should be letters (positions 0-2)
-    numbers = text[3:6]         # Should be digits (positions 3-5)
-    letters_suffix = text[6:8]  # Should be letters (positions 6-7)
+    letters_prefix = text[:3]  # Should be letters
+    numbers = text[3:6]         # Should be digits
+    letters_suffix = text[6:8]  # Should be letters
     
     # Step 5: Apply context-aware corrections
     

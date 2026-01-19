@@ -61,7 +61,7 @@ def detect_plate_region(image):
     Detect license plate region using YOLOv8.
     
     Args:
-        image: Input image (BGR format from OpenCV)
+        image: Input image (BGR format from OpenCV, or PIL Image)
     
     Returns:
         tuple: (plate_region, bounding_box) where:
@@ -70,6 +70,14 @@ def detect_plate_region(image):
             Returns (None, None) if no plate detected
     """
     try:
+        from . import utils
+        
+        # Ensure image is in OpenCV BGR format
+        image = utils.ensure_opencv_format(image)
+        if image is None:
+            print("Error: Could not convert image to OpenCV format")
+            return None, None
+        
         model = get_yolo_model()
         
         # Run inference with confidence threshold
@@ -150,7 +158,7 @@ def detect_plate_region_with_debug(image, debug=True):
     Detect license plate region using YOLOv8 with debug visualization.
     
     Args:
-        image: Input image (BGR format from OpenCV)
+        image: Input image (BGR format from OpenCV, or PIL Image)
         debug: If True, print debug information and draw all detections
     
     Returns:
@@ -161,6 +169,14 @@ def detect_plate_region_with_debug(image, debug=True):
             Returns (None, None, None) if no plate detected
     """
     try:
+        from . import utils
+        
+        # Ensure image is in OpenCV BGR format
+        image = utils.ensure_opencv_format(image)
+        if image is None:
+            print("Error: Could not convert image to OpenCV format")
+            return None, None, None
+        
         model = get_yolo_model()
         
         # Run inference with confidence threshold
@@ -303,13 +319,21 @@ def get_all_plate_regions(image, max_plates=5):
     Get multiple potential plate regions from an image using YOLO.
     
     Args:
-        image: Input image
+        image: Input image (BGR format from OpenCV, or PIL Image)
         max_plates: Maximum number of plates to return
     
     Returns:
         list: List of (plate_region, bounding_box) tuples
     """
     try:
+        from . import utils
+        
+        # Ensure image is in OpenCV BGR format
+        image = utils.ensure_opencv_format(image)
+        if image is None:
+            print("Error: Could not convert image to OpenCV format")
+            return []
+        
         model = get_yolo_model()
         
         # Run inference

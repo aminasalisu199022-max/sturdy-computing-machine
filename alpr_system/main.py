@@ -101,27 +101,17 @@ def _process_image(image_path):
     # Extract text from plate
     raw_text = ocr.extract_text_from_plate(plate_region)
     
-    # Validate using Nigerian plate format
-    validation_result = plate_validation.validate_nigerian_plate(raw_text)
+    # Validate and format using Nigerian plate format (AAA-123AA)
+    is_valid, formatted_text = plate_validation.validate_and_format_plate(raw_text)
     
-    if not validation_result['is_valid']:
+    if not is_valid:
         return {
             'success': False,
-            'message': f"Invalid Nigerian license plate format: {validation_result['message']}",
+            'message': f"Invalid Nigerian license plate format",
             'results': [],
             'timestamp': utils.get_timestamp(),
             'processed_image': detector.draw_bounding_box(display_image, bounding_box)
         }
-    
-    formatted_text = validation_result['plate_number']
-    plate_type_from_validation = validation_result['plate_type']
-    
-    # Classify plate by color (for additional confirmation)
-    plate_color_name = plate_color.get_plate_color(plate_region)
-    plate_type_from_color = plate_color.classify_plate_type(plate_color_name)
-    
-    # Prefer the type from validation, but note the color
-    plate_type = plate_type_from_validation
     
     # Look up vehicle in database
     vehicle_info = vehicle_db.lookup_vehicle(formatted_text)
@@ -129,47 +119,34 @@ def _process_image(image_path):
     # Build result with comprehensive information
     result = {
         'plate_number': formatted_text,
-        'plate_color': plate_color_name,
-        'plate_type': plate_type,
-        'plate_type_color_based': plate_type_from_color,
-        'ocr_confidence': validation_result.get('confidence', 0.9),
-        'owner_name': vehicle_info.get('owner_name', 'Vehicle details not found') if vehicle_info else 'Vehicle details not found',
-        'state': vehicle_info.get('state', 'Unknown') if vehicle_info else 'Unknown',
-        'vehicle_type': vehicle_info.get('vehicle_type', 'Unknown') if vehicle_info else 'Unknown',
-        'vehicle_color': vehicle_info.get('color', 'Unknown') if vehicle_info else 'Unknown',
-        'year': vehicle_info.get('year', None) if vehicle_info else None,
+        'plate_color': 'Unknown',
+        'plate_type': 'Unknown',
+        'ocr_confidence': 0.85,
+        'owner_name': vehicle_info.get('owner_name') if vehicle_info else 'Unknown',
+        'state': vehicle_info.get('state') if vehicle_info else 'Unknown',
+        'vehicle_type': vehicle_info.get('vehicle_type') if vehicle_info else 'Unknown',
         'registered': vehicle_info is not None,
-        'state_code': validation_result.get('state_code', ''),
         'timestamp': utils.get_timestamp()
     }
     
-    # Draw bounding box on image with colored outline based on type
-    color_map = {
-        'Personal': (0, 0, 255),      # Blue for personal
-        'Commercial': (0, 165, 255),  # Orange for commercial
-        'Government': (0, 255, 0)     # Green for government
-    }
-    box_color = color_map.get(plate_type, (0, 255, 255))
+    # If vehicle is found, get additional details
+    if vehicle_info:
+        result['plate_color'] = vehicle_info.get('plate_color', 'Unknown')
+        result['plate_type'] = vehicle_info.get('plate_type', 'Unknown')
     
-    processed_image = detector.draw_bounding_box(display_image, bounding_box, color=box_color, thickness=3)
+    # Draw bounding box on image
+    processed_image = detector.draw_bounding_box(display_image, bounding_box, color=(0, 255, 0), thickness=2)
     
-    # Add comprehensive text annotations
-    y_offset = 30
-    cv2.putText(processed_image, f"Plate: {formatted_text}", (10, y_offset),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.9, box_color, 2)
-    y_offset += 30
-    cv2.putText(processed_image, f"Type: {plate_type}", (10, y_offset),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.8, box_color, 2)
-    y_offset += 30
-    cv2.putText(processed_image, f"Owner: {result['owner_name']}", (10, y_offset),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 1)
-    y_offset += 25
-    cv2.putText(processed_image, f"Vehicle: {result['vehicle_type']}", (10, y_offset),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 1)
+    # Add text annotations
+    cv2.putText(processed_image, f"Plate: {formatted_text}", (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+    if result['registered']:
+        cv2.putText(processed_image, f"Owner: {result['owner_name']}", (10, 60),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 1)
     
     return {
         'success': True,
-        'message': f'Successfully detected plate: {formatted_text}',
+        'message': f'Plate detected: {formatted_text}',
         'results': [result],
         'timestamp': utils.get_timestamp(),
         'processed_image': processed_image
@@ -226,22 +203,15 @@ def _process_video(video_path):
         # Extract text
         raw_text = ocr.extract_text_from_plate(plate_region)
         
-        # Validate using Nigerian plate format
-        validation_result = plate_validation.validate_nigerian_plate(raw_text)
+        # Validate and format using Nigerian plate format
+        is_valid, formatted_text = plate_validation.validate_and_format_plate(raw_text)
         
-        if not validation_result['is_valid']:
+        if not is_valid:
             continue
-        
-        formatted_text = validation_result['plate_number']
         
         # Skip if we already have this plate
         if any(r['plate_number'] == formatted_text for r in all_results):
             continue
-        
-        # Classify plate by color
-        plate_color_name = plate_color.get_plate_color(plate_region)
-        plate_type_from_color = plate_color.classify_plate_type(plate_color_name)
-        plate_type_str = validation_result['plate_type']
         
         # Look up vehicle
         vehicle_info = vehicle_db.lookup_vehicle(formatted_text)
@@ -249,37 +219,31 @@ def _process_video(video_path):
         # Build result
         result = {
             'plate_number': formatted_text,
-            'plate_color': plate_color_name,
-            'plate_type': plate_type_str,
-            'ocr_confidence': validation_result.get('confidence', 0.9),
-            'owner_name': vehicle_info.get('owner_name', 'Vehicle details not found') if vehicle_info else 'Vehicle details not found',
-            'state': vehicle_info.get('state', 'Unknown') if vehicle_info else 'Unknown',
-            'vehicle_type': vehicle_info.get('vehicle_type', 'Unknown') if vehicle_info else 'Unknown',
-            'vehicle_color': vehicle_info.get('color', 'Unknown') if vehicle_info else 'Unknown',
-            'year': vehicle_info.get('year', None) if vehicle_info else None,
+            'plate_color': 'Unknown',
+            'plate_type': 'Unknown',
+            'ocr_confidence': 0.85,
+            'owner_name': vehicle_info.get('owner_name') if vehicle_info else 'Unknown',
+            'state': vehicle_info.get('state') if vehicle_info else 'Unknown',
+            'vehicle_type': vehicle_info.get('vehicle_type') if vehicle_info else 'Unknown',
             'registered': vehicle_info is not None,
             'frame_number': frame_idx,
-            'state_code': validation_result.get('state_code', ''),
             'timestamp': utils.get_timestamp()
         }
         
+        # Get plate details from vehicle info if available
+        if vehicle_info:
+            result['plate_color'] = vehicle_info.get('plate_color', 'Unknown')
+            result['plate_type'] = vehicle_info.get('plate_type', 'Unknown')
+        
         all_results.append(result)
         
-        # Draw on frame with color based on plate type
-        color_map = {
-            'Personal': (0, 0, 255),      # Blue for personal
-            'Commercial': (0, 165, 255),  # Orange for commercial
-            'Government': (0, 255, 0)     # Green for government
-        }
-        box_color = color_map.get(plate_type_str, (0, 255, 255))
-        
-        processed_frame = detector.draw_bounding_box(display_frame, bounding_box, color=box_color, thickness=3)
+        # Draw on frame
+        processed_frame = detector.draw_bounding_box(display_frame, bounding_box, color=(0, 255, 0), thickness=2)
         cv2.putText(processed_frame, f"Plate: {formatted_text}", (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, box_color, 2)
-        cv2.putText(processed_frame, f"Type: {plate_type_str}", (10, 60),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, box_color, 1)
-        cv2.putText(processed_frame, f"Owner: {result['owner_name']}", (10, 85),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+        if result['registered']:
+            cv2.putText(processed_frame, f"Owner: {result['owner_name']}", (10, 60),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
         processed_frames.append(processed_frame)
     
     if not all_results:
